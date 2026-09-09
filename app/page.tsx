@@ -2,8 +2,9 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { authClient } from "@/lib/auth-client";
-import { Check, ChevronDown, LogOut, Plus, Trash2 } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
+import { ChevronDown, LogOut, Plus, Trash2 } from "lucide-react";
+import { FormEvent, useState } from "react";
+import { toast } from "sonner";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -49,15 +50,6 @@ export default function Home() {
   const categories = tasks.data ?? [];
   const activeId = tab || categories[0]?.id || "";
   const activeCategory = categories.find((item) => item.id === activeId);
-  const pending = useMemo(
-    () =>
-      categories.flatMap((category) =>
-        category.tasks
-          .filter((task) => !task.is_completed)
-          .map((task) => ({ ...task, categoryName: category.name })),
-      ),
-    [categories],
-  );
   const refresh = () => client.invalidateQueries({ queryKey: key });
   const toggle = useMutation({
     mutationFn: ({ id, completed }: { id: string; completed: boolean }) =>
@@ -120,6 +112,23 @@ export default function Home() {
       refresh();
     },
   });
+  const completeTask = (task: Task, completed: boolean) => {
+    toggle.mutate({ id: task.id, completed });
+    if (completed) {
+      toast.success(`"${task.title}" is completed`, {
+        action: {
+          label: "Undo",
+          onClick: () => toggle.mutate({ id: task.id, completed: false }),
+        },
+        actionButtonStyle: {
+          backgroundColor: "#ececea",
+          color: "#000000",
+          borderRadius: "6px",
+          fontWeight: "500",
+        },
+      });
+    }
+  };
 
   if (loadingSession)
     return (
@@ -221,69 +230,24 @@ export default function Home() {
               )}
             </div>
             <div className="divide-y">
-              {activeCategory?.tasks.length ? (
-                activeCategory.tasks.map((task) => (
-                  <TaskRow
-                    key={task.id}
-                    task={task}
-                    onToggle={(completed) =>
-                      toggle.mutate({ id: task.id, completed })
-                    }
-                    onDelete={() => remove.mutate(task.id)}
-                    deleting={remove.isPending}
-                  />
-                ))
+              {activeCategory?.tasks.some((task) => !task.is_completed) ? (
+                activeCategory.tasks
+                  .filter((task) => !task.is_completed)
+                  .map((task) => (
+                    <TaskRow
+                      key={task.id}
+                      task={task}
+                      onToggle={(completed) => completeTask(task, completed)}
+                      onDelete={() => remove.mutate(task.id)}
+                      deleting={remove.isPending}
+                    />
+                  ))
               ) : (
                 <p className="p-5 text-sm text-slate-500">
                   No tasks in this category yet.
                 </p>
               )}
             </div>
-          </section>
-          <section className="mt-8 rounded-xl border-2 border-amber-200 bg-amber-50 p-5">
-            <h2 className="font-semibold">Not Done Yet</h2>
-            {pending.length ? (
-              <div className="mt-3 divide-y divide-amber-200">
-                {pending.map((task) => (
-                  <div key={task.id} className="flex items-center gap-3 py-3">
-                    <input
-                      aria-label={`Complete ${task.title}`}
-                      type="checkbox"
-                      checked={false}
-                      onChange={() =>
-                        toggle.mutate({ id: task.id, completed: true })
-                      }
-                      className="h-4 w-4 accent-slate-900"
-                    />
-                    <span className="flex-1 text-sm">{task.title}</span>
-                    {(() => {
-                      const badgeStyles: Record<string, string> = {
-                        Opening:
-                          "bg-blue-100 text-blue-800 border border-blue-200",
-                        Closing:
-                          "bg-rose-100 text-rose-800 border border-rose-200",
-                      };
-
-                      const currentStyle =
-                        badgeStyles[task.categoryName] ||
-                        "bg-amber-100 text-amber-800 border border-amber-200";
-
-                      return (
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-xs font-medium ${currentStyle}`}
-                        >
-                          {task.categoryName}
-                        </span>
-                      );
-                    })()}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="mt-3 flex items-center gap-2 text-sm text-emerald-700">
-                <Check size={17} /> All tasks are complete. Nice work!
-              </div>
-            )}
           </section>
         </>
       )}
